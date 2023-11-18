@@ -1,7 +1,9 @@
 {
   "name": "icanloadjs",
   "version": "1.0.0",
-  "description": "",
+  "description": "Simple and Powerful Node.js Performance Testing",
+  "repository": "https://github.com/modalqa/icanloadjs",
+	"homepage": "https://github.com/modalqa/icanloadjs",
   "main": "index.js",
   "scripts": {
     "test": "node test.js"
