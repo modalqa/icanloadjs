@@ -38,3 +38,10 @@ const numRequests = 1;
 const numVirtualUsers = 1;
 
 icanloadjs.runPerformanceTest(urlToTest, method, numRequests, numVirtualUsers);
+```
+## Example Test Result
+
+![icanLoadJS](https://drive.google.com/file/d/1MwV9Ht63L5-aVTSXr3Q5_CNblwRtKSkN/view)
+
+
+
