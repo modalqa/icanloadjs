@@ -3,12 +3,15 @@
   "version": "1.0.0",
   "description": "Simple and Powerful Node.js Performance Testing",
   "repository": "https://github.com/modalqa/icanloadjs",
-	"homepage": "https://github.com/modalqa/icanloadjs",
+  "homepage": "https://github.com/modalqa/icanloadjs",
   "main": "index.js",
   "scripts": {
     "test": "node test.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "icanloadjs": "^1.0.0"
+  }
 }
