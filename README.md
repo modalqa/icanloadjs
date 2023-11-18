@@ -1,5 +1,7 @@
 # icanloadjs: Simple and Powerful Node.js Performance Testing
 
+<img src="https://github.com/modalqa/icanloadjs/raw/main/media/IcanLoadJS-logo.png" alt="icanloadjs Logo" width="100" height="100">
+
 [![npm version](https://img.shields.io/npm/v/icanloadjs.svg)](https://www.npmjs.com/package/icanloadjs)
 
 ## Overview
@@ -41,7 +43,6 @@ icanloadjs.runPerformanceTest(urlToTest, method, numRequests, numVirtualUsers);
 ```
 ## Example Test Result
 
-![icanLoadJS](https://drive.google.com/file/d/1MwV9Ht63L5-aVTSXr3Q5_CNblwRtKSkN/view)
-
+<img src="https://github.com/modalqa/icanloadjs/raw/main/media/icanloadjs-result.png" alt="icanloadjs Result" width="300" height="200">
 
 
