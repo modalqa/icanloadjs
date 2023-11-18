@@ -1,6 +1,13 @@
+<style>
+  .center {
+    text-align: center;
+  }
+</style>
 # icanloadjs: Simple and Powerful Node.js Performance Testing
 
-<img src="https://github.com/modalqa/icanloadjs/raw/main/media/IcanLoadJS-logo.png" alt="icanloadjs Logo" width="100" height="100">
+<div class="center">
+  <img src="https://github.com/modalqa/icanloadjs/raw/main/media/IcanLoadJS-logo.png" alt="icanloadjs Logo" width="200" height="200">
+</div>
 
 [![npm version](https://img.shields.io/npm/v/icanloadjs.svg)](https://www.npmjs.com/package/icanloadjs)
 
