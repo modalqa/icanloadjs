@@ -40,7 +40,7 @@ const method = 'GET';
 const numRequests = 1;
 const numVirtualUsers = 1;
 
-icanloadjs.runPerformanceTest(urlToTest, method, numRequests, numVirtualUsers);
+icanloadjs.runIcan(urlToTest, method);
 ```
 ## Example Test Result
 

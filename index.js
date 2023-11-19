@@ -1,4 +1,3 @@
-// performanceTestModule.js
 const https = require('https');
 
 class VirtualUser {
