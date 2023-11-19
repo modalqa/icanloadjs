@@ -1,6 +1,6 @@
 const icanloadjs = require('icanloadjs');
 
-const urlToTest = 'https://www.legit-group.com';
+const urlToTest = 'https://balsam-loving-legal.glitch.me/users';
 const method = 'GET';
 // const numRequests = 10;
 // const numVirtualUsers = 5;
