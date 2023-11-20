@@ -28,6 +28,8 @@ class icanloadjs {
     this.checksPassed = 0;
     this.checksFailed = 0;
     this.thresholds = thresholds;
+    this.sentDataSize = 0;
+    this.receivedDataSize = 0;
   }
 
   createVirtualUser() {
@@ -68,11 +70,22 @@ class icanloadjs {
     this.checksFailed++;
   }
 
+   // Metode untuk melacak ukuran data terkirim
+   trackSentDataSize(size) {
+    this.sentDataSize += size;
+  }
+
+  // Metode untuk melacak ukuran data diterima
+  trackReceivedDataSize(size) {
+    this.receivedDataSize += size;
+  }
+
+
   calculateMetrics() {
     const averageValue = this.sum / this.counter;
     const modeValue = this.calculateMode();
     const percentileValue = this.calculatePercentile(50);
-
+  
     return {
       checksFailed: this.checksFailed,
       counter: this.counter,
@@ -85,10 +98,13 @@ class icanloadjs {
       modeValue,
       percentileValue,
       socketWaitTime: this.socketWaitTime,
-      checksPassed: this.checksPassed, // Menambahkan jumlah pemeriksaan yang berhasil ke hasil metrik
+      checksPassed: this.checksPassed,
       virtualUsers: this.virtualUsers.map((user) => ({
         requestCount: user.getRequestCount(),
       })),
+      // Menambahkan metrik ukuran data terkirim dan diterima
+      sentDataSize: this.sentDataSize,
+      receivedDataSize: this.receivedDataSize,
     };
   }
 
@@ -116,15 +132,24 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
       timeout: 5000
     };
 
+    
+
     if (data) {
-      options.headers['Content-Length'] = Buffer.from(JSON.stringify(data)).length;
+      const jsonData = JSON.stringify(data);
+      options.headers['Content-Length'] = Buffer.from(jsonData).length;
+
+      // Melacak ukuran data terkirim
+      metrics.trackSentDataSize(Buffer.from(jsonData).length);
     }
 
     const startTime = Date.now();
     let socketAllocatedTime;
 
     const req = https.request(url, options, (res) => {
-      res.on('data', (responseData) => {});
+      res.on('data', (responseData) => {
+        // Melacak ukuran data diterima
+        metrics.trackReceivedDataSize(responseData.length);
+      });
   
       res.on('end', () => {
         const endTime = Date.now();
@@ -174,6 +199,9 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
     Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
   );
 
+  // Display the animation message "-------ICANLOADJS-------" without delay
+  console.log('----------ICANLOADJS----------');
+
   await Promise.all(requests.flat());
 
   const calculatedMetrics = metrics.calculateMetrics();
@@ -182,13 +210,24 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
   console.log('Metrics:');
   console.log(calculatedMetrics);
 
-  // Memeriksa ambang batas dan menentukan apakah pengujian berhasil atau gagal
+  // Check if thresholds are defined before accessing their properties
   if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
     console.error(`Performance test failed: Exceeded the maximum allowed failed checks.`);
-    process.exit(1); // Exit with a non-zero status code to indicate failure
-  } else {
-    console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
+    process.exit(1);
   }
+
+  // Additional matrix checks
+  if (thresholds.http_req_failed && calculatedMetrics.checksFailedRate > thresholds.http_req_failed) {
+    console.error(`Performance test failed: http_req_failed rate exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  if (thresholds.http_req_duration && calculatedMetrics.percentileValue > thresholds.http_req_duration) {
+    console.error(`Performance test failed: http_req_duration exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
 };
 
 
