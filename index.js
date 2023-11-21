@@ -227,11 +227,57 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
     process.exit(1);
   }
 
-  console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
+  // console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
 };
 
+// Breakpoint Testing
+runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, breakpoints = {}) => {
+  const metrics = new icanloadjs();
 
+  const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
+
+  const requests = virtualUsers.map((user) =>
+    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
+  );
+
+  console.log('----------ICANLOADJS Breakpoint Test----------');
+
+  await Promise.all(requests.flat());
+
+  const calculatedMetrics = metrics.calculateMetrics();
+
+  console.log(`Breakpoint test completed for ${numRequests * numVirtualUsers} requests by ${numVirtualUsers} virtual users.`);
+  console.log('Metrics:');
+  console.log(calculatedMetrics);
+
+  // Check if thresholds are defined before accessing their properties
+  if (breakpoints.maxRequests && calculatedMetrics.totalRequests > breakpoints.maxRequests) {
+    console.error(`Breakpoint test failed: Exceeded the maximum allowed requests.`);
+  }
+
+  if (breakpoints.maxDataSize && calculatedMetrics.receivedDataSize > breakpoints.maxDataSize) {
+    console.error(`Breakpoint test failed: Exceeded the maximum allowed data size.`);
+  }
+
+  if (breakpoints.maxDuration && calculatedMetrics.percentileValue > breakpoints.maxDuration) {
+    console.error(`Breakpoint test failed: Exceeded the maximum allowed duration.`);
+  }
+
+  // Add more breakpoint checks as needed
+
+  if (
+    breakpoints.maxFailedChecks &&
+    calculatedMetrics.checksFailed > breakpoints.maxFailedChecks
+  ) {
+    console.error(`Breakpoint test failed: Exceeded the maximum allowed failed checks.`);
+  }
+
+  // console.log(`Breakpoint test passed on ${new Date().toLocaleDateString()}.`);
+};
+
+console.log(`Testing passed on ${new Date().toLocaleDateString()}.`);
 
 module.exports = {
   runIcan,
+  runBreakpointIcan,
 };

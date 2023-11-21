@@ -26,9 +26,9 @@
 
 ## Getting Started
 
-1. Install icanloadjs using npm: `npm install -g icanloadjs`
+1. Install icanloadjs using npm: `npm i icanloadjs`
 2. Create a simple test script to define your test scenarios.
-3. Run your performance tests: `icanloadjs your_test_script.js`
+3. Run your performance tests: `node your_test_script.js`
 
 ## Example Test Script
 
