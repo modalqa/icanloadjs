@@ -16,7 +16,6 @@ const breakpoints = {
 (async () => {
   try {
     await runBreakpointIcan(url, method, numRequests, numVirtualUsers, breakpoints);
-    console.log('Breakpoint test passed!');
   } catch (error) {
     console.error(`Breakpoint test failed: ${error.message}`);
   }

@@ -119,7 +119,14 @@ class icanloadjs {
   }
 }
 
-const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser) => {
+
+const sleepIcan = (minMilliseconds, maxMilliseconds) => {
+  const duration = Math.floor(Math.random() * (maxMilliseconds - minMilliseconds + 1)) + minMilliseconds;
+  return new Promise(resolve => setTimeout(resolve, duration));
+};
+
+const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
+  try {
   virtualUser.incrementRequestCounter();
   metrics.incrementCounter();
 
@@ -129,49 +136,68 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 5000
+      timeout: 10000,
     };
 
-    
+    if (auth) {
+      if (auth.type === 'basic') {
+        const base64Credentials = Buffer.from(`${auth.username}:${auth.password}`).toString('base64');
+        options.headers['Authorization'] = `Basic ${base64Credentials}`;
+      } else if (auth.type === 'token') {
+        options.headers['Authorization'] = `Bearer ${auth.token}`;
+      } else if (auth.type === 'custom') {
+        // Handle custom authentication logic here
+        options.headers['Custom-Authorization'] = `Custom ${auth.customValue}`;
+      }
+      // Add more authentication methods as needed
+    }
 
     if (data) {
       const jsonData = JSON.stringify(data);
       options.headers['Content-Length'] = Buffer.from(jsonData).length;
-
-      // Melacak ukuran data terkirim
       metrics.trackSentDataSize(Buffer.from(jsonData).length);
     }
 
     const startTime = Date.now();
     let socketAllocatedTime;
+    let tokenFromResponse; // Variable untuk menyimpan token dari respons
 
     const req = https.request(url, options, (res) => {
+      const chunks = [];
+
       res.on('data', (responseData) => {
-        // Melacak ukuran data diterima
         metrics.trackReceivedDataSize(responseData.length);
+        chunks.push(responseData);
       });
-  
+
       res.on('end', () => {
         const endTime = Date.now();
         const elapsedTime = endTime - startTime;
         metrics.trackValue(elapsedTime);
-  
+
         if (socketAllocatedTime) {
           const waitingTime = startTime - socketAllocatedTime;
           metrics.trackSocketWaitTime(waitingTime);
         }
-  
-        // Menambahkan pemeriksaan sederhana: respon.status === 200
+
         if (res.statusCode === 200) {
           metrics.trackCheckPassed();
+
+          // Coba untuk mengambil token dari respons
+          try {
+            const responseData = JSON.parse(Buffer.concat(chunks).toString());
+            tokenFromResponse = responseData.token; // Ganti 'token' dengan kunci yang sesuai pada respons API
+          } catch (error) {
+            console.error('Error parsing response data:', error.message);
+          }
         } else {
-          metrics.trackCheckFailed(); // Memanggil trackCheckFailed untuk pemeriksaan yang gagal
+          metrics.trackCheckFailed();
         }
-  
-        resolve(elapsedTime);
+
+        resolve({ elapsedTime, token: tokenFromResponse }); // Mengembalikan waktu respons dan token
       });
     });
-//
+
     req.on('socket', (socket) => {
       socket.on('allocate', () => {
         socketAllocatedTime = Date.now();
@@ -179,7 +205,20 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
     });
 
     req.on('error', (error) => {
-      reject(error);
+      if (error.code === 'ECONNRESET') {
+        const timestamp = new Date().toLocaleTimeString(); // Mendapatkan timestamp saat terjadi kesalahan
+        const errorMessage = `ECONNRESET or connection to the server is lost`;
+        console.error(`Error: ${errorMessage} at ${timestamp}. Stopping the performance test.`);
+        
+        // Increment jumlah kesalahan ECONNRESET
+        metrics.trackCheckFailed();
+        
+        process.exit(1);
+      } else {
+        console.error('Error in HTTP request:', error.message);
+        reject(error);
+      }
+      
     });
 
     if (data) {
@@ -188,6 +227,10 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
 
     req.end();
   });
+} catch (error) {
+  console.error('Error in performHttpRequest:', error.message);
+  throw error; // Re-throw the error to propagate it up the call stack
+}
 };
 
 const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}) => {
@@ -227,7 +270,7 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
     process.exit(1);
   }
 
-  // console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
+  console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
 };
 
 // Breakpoint Testing
@@ -272,12 +315,11 @@ runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers
     console.error(`Breakpoint test failed: Exceeded the maximum allowed failed checks.`);
   }
 
-  // console.log(`Breakpoint test passed on ${new Date().toLocaleDateString()}.`);
+  console.log(`Breakpoint test passed on ${new Date().toLocaleDateString()}.`);
 };
-
-console.log(`Testing passed on ${new Date().toLocaleDateString()}.`);
 
 module.exports = {
   runIcan,
   runBreakpointIcan,
+  sleepIcan,
 };

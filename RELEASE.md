@@ -2,6 +2,12 @@
 
 Semua perubahan yang signifikan dalam proyek ini akan didokumentasikan di sini.
 
+## [1.0.5] - 2023-11-22
+## Tambah
+- Added sleepIcan : Suspend Virtual User execution for the specified duration. exp : sleepIcan(5000); "Sleep for 5 seconds or sleepIcan"(5000 * 30000); "Sleep for a random duration between 5 and 30 seconds"
+- Added authentication method : basic, bearer, custom authentication
+- Added error handle when testing and server connection is lost
+
 ## [1.0.4] - 2023-11-22
 ## Tambah
 - Added breakpoint test function : to find out system limitations (To adjust or maintain weak points of the system to move higher limits to higher levels & To help plan remediation steps in such cases and prepare when the system approaches those limits)
