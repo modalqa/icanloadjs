@@ -1,4 +1,5 @@
 const https = require('https');
+const http = require('http');
 
 class VirtualUser {
   constructor() {
@@ -127,10 +128,14 @@ const sleepIcan = (minMilliseconds, maxMilliseconds) => {
 
 const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
   try {
+
+  // Set batas pendengar maksimum untuk semua EventEmitter
+  require('events').EventEmitter.defaultMaxListeners = 25;
   virtualUser.incrementRequestCounter();
   metrics.incrementCounter();
 
   return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https://') ? https : http;
     const options = {
       method,
       headers: {
@@ -157,12 +162,13 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
       options.headers['Content-Length'] = Buffer.from(jsonData).length;
       metrics.trackSentDataSize(Buffer.from(jsonData).length);
     }
+    
 
     const startTime = Date.now();
     let socketAllocatedTime;
     let tokenFromResponse; // Variable untuk menyimpan token dari respons
 
-    const req = https.request(url, options, (res) => {
+    const req = protocol.request(url, options, (res) => {
       const chunks = [];
 
       res.on('data', (responseData) => {
@@ -206,19 +212,25 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
 
     req.on('error', (error) => {
       if (error.code === 'ECONNRESET') {
-        const timestamp = new Date().toLocaleTimeString(); // Mendapatkan timestamp saat terjadi kesalahan
+        const timestamp = new Date().toLocaleTimeString();
         const errorMessage = `ECONNRESET or connection to the server is lost`;
         console.error(`Error: ${errorMessage} at ${timestamp}. Stopping the performance test.`);
-        
-        // Increment jumlah kesalahan ECONNRESET
+
         metrics.trackCheckFailed();
-        
+
+        process.exit(1);
+      } else if (error.code === 'ETIMEDOUT') {
+        console.error('Error: ETIMEDOUT - Request timed out. Stopping the performance test.');
+        metrics.trackCheckFailed();
+        process.exit(1);
+      } else if (error.code === 'ECONNREFUSED') {
+        console.error('Error: ECONNREFUSED - Connection refused by the server. Stopping the performance test.');
+        metrics.trackCheckFailed();
         process.exit(1);
       } else {
         console.error('Error in HTTP request:', error.message);
         reject(error);
       }
-      
     });
 
     if (data) {
@@ -228,9 +240,19 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
     req.end();
   });
 } catch (error) {
-  console.error('Error in performHttpRequest:', error.message);
-  throw error; // Re-throw the error to propagate it up the call stack
-}
+  if (error.code === 'ETIMEDOUT') {
+    console.error('Error: ETIMEDOUT - Request timed out. Stopping the performance test.');
+    metrics.trackCheckFailed();
+    process.exit(1);
+  } else if (error.code === 'ECONNREFUSED') {
+    console.error('Error: ECONNREFUSED - Connection refused by the server. Stopping the performance test.');
+    metrics.trackCheckFailed();
+    process.exit(1);
+  } else {
+    console.error('Error in performHttpRequest:', error.message);
+    throw error;
+    }
+  }
 };
 
 const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}) => {
@@ -318,8 +340,70 @@ runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers
   console.log(`Breakpoint test passed on ${new Date().toLocaleDateString()}.`);
 };
 
+const runIcanWithArrivalRate = async (
+  url,
+  method = 'GET',
+  numRequests = 1,
+  targetArrivalRate = 1, // Set your target arrival rate in requests per second
+  data = null,
+  thresholds = {}
+) => {
+  const metrics = new icanloadjs(thresholds);
+
+  // Calculate the total number of Virtual Users needed based on the target arrival rate
+  const totalVirtualUsers = Math.ceil(targetArrivalRate * numRequests);
+
+  // Create a pool of Virtual Users
+  const virtualUsers = Array.from({ length: totalVirtualUsers }, () => metrics.createVirtualUser());
+
+  // Calculate the delay between each Virtual User's start time
+  const delayBetweenUsers = 1000 / targetArrivalRate; // in milliseconds
+
+  // Function to perform a request and track metrics for a single Virtual User
+  const performRequestForUser = async (user) => {
+    for (let i = 0; i < numRequests; i++) {
+      await performHttpRequest(url, method, data, metrics, user);
+      await sleepIcan(0, 0); // Adjust this delay if needed
+    }
+  };
+
+  // Display the animation message "-------ICANLOADJS-------" without delay
+  console.log('----------ICANLOADJS----------');
+
+  // Start each Virtual User with a delay between them
+  await Promise.all(
+    virtualUsers.map((user, index) => sleepIcan(index * delayBetweenUsers, index * delayBetweenUsers).then(() => performRequestForUser(user)))
+  );
+
+  const calculatedMetrics = metrics.calculateMetrics();
+
+  console.log(`Performance test completed for ${numRequests * totalVirtualUsers} requests by ${totalVirtualUsers} virtual users.`);
+  console.log('Metrics:');
+  console.log(calculatedMetrics);
+
+  // Check if thresholds are defined before accessing their properties
+  if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
+    console.error(`Performance test failed: Exceeded the maximum allowed failed checks.`);
+    process.exit(1);
+  }
+
+  // Additional matrix checks
+  if (thresholds.http_req_failed && calculatedMetrics.checksFailedRate > thresholds.http_req_failed) {
+    console.error(`Performance test failed: http_req_failed rate exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  if (thresholds.http_req_duration && calculatedMetrics.percentileValue > thresholds.http_req_duration) {
+    console.error(`Performance test failed: http_req_duration exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
+};
+
 module.exports = {
   runIcan,
   runBreakpointIcan,
   sleepIcan,
+  runIcanWithArrivalRate,
 };

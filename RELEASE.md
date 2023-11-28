@@ -2,7 +2,21 @@
 
 Semua perubahan yang signifikan dalam proyek ini akan didokumentasikan di sini.
 
-## [1.0.5] - 2023-11-22
+## [1.0.6] - 2023-12-03
+## Tambah
+- Added error handle when the server has reached its connection limit and is refusing new connections
+- Added runIcanWithArrivalRate
+- Update can be used for http or https
+
+### runIcanWithArrivalRate
+is designed to test system performance by allowing you to control the arrival rate of requests from virtual users. Arrival rate is the number of requests that arrive per unit time, usually measured in requests per second.
+
+Situations where you might need to use runIcanWithArrivalRate:
+- Peak Load Testing: You want to see how your system responds when there are high spikes in demand, such as during flash sales or special promotional periods.
+- Daily Traffic Pattern Simulation: You want to test system performance at certain times of the day, for example, at the start of the work day or during peak hours.
+- System Scalability: You want to evaluate the system's ability to handle significant traffic fluctuations and ensure that resources can be allocated efficiently.
+
+## [1.0.5] - 2023-11-28
 ## Tambah
 - Added sleepIcan : Suspend Virtual User execution for the specified duration. exp : sleepIcan(5000); "Sleep for 5 seconds or sleepIcan"(5000 * 30000); "Sleep for a random duration between 5 and 30 seconds"
 - Added authentication method : basic, bearer, custom authentication
