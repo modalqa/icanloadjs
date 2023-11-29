@@ -12,6 +12,6 @@
   "author": "depfaris",
   "license": "ISC",
   "dependencies": {
-    "icanloadjs": "^1.0.5"
+    "icanloadjs": "^1.0.6"
   }
 }

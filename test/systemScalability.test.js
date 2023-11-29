@@ -1,4 +1,4 @@
-const icanloadjs = require('../index');
+const icanloadjs = require('icanloadjs');
 
 const urlToTest = 'https://fakestoreapi.com/products';
 const method = 'GET';

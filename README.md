@@ -24,6 +24,11 @@
 
 - **Arrival Rate:** is designed to test system performance by allowing you to control the arrival rate of requests from virtual users. Arrival rate is the number of requests that arrive per unit time, usually measured in requests per second.
 
+Situations where you might need to use runIcanWithArrivalRate:
+- Peak Load Testing: You want to see how your system responds when there are high spikes in demand, such as during flash sales or special promotional periods.
+- Daily Traffic Pattern Simulation: You want to test system performance at certain times of the day, for example, at the start of the work day or during peak hours.
+- System Scalability: You want to evaluate the system's ability to handle significant traffic fluctuations and ensure that resources can be allocated efficiently.
+
 - **Date-Stamped Results:** Keep track of when your performance tests were successful. The tool automatically logs the test completion date for easy reference.
 
 ## Getting Started
