@@ -31,6 +31,8 @@ class icanloadjs {
     this.thresholds = thresholds;
     this.sentDataSize = 0;
     this.receivedDataSize = 0;
+    this.droppedIterations = 0;
+    this.droppedIterationsDetails = [];
   }
 
   createVirtualUser() {
@@ -86,8 +88,8 @@ class icanloadjs {
     const averageValue = this.sum / this.counter;
     const modeValue = this.calculateMode();
     const percentileValue = this.calculatePercentile(50);
-  
-    return {
+
+    const metrics = {
       checksFailed: this.checksFailed,
       counter: this.counter,
       totalRequests: this.totalRequests,
@@ -107,6 +109,20 @@ class icanloadjs {
       sentDataSize: this.sentDataSize,
       receivedDataSize: this.receivedDataSize,
     };
+
+    if (this.droppedIterations !== undefined) {
+      metrics.droppedIterations = this.droppedIterations;
+    }
+
+    if (this.droppedIterationsDetails.length > 0) {
+      metrics.droppedIterationsDetails = this.droppedIterationsDetails;
+    }
+
+    return metrics;
+}
+  incrementDroppedIterations(details) {
+    this.droppedIterations++;
+    this.droppedIterationsDetails.push(details); // Store details of dropped iterations
   }
 
   calculateMode() {
@@ -126,9 +142,10 @@ const sleepIcan = (minMilliseconds, maxMilliseconds) => {
   return new Promise(resolve => setTimeout(resolve, duration));
 };
 
-const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
+// const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
+const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null, useSSL = false) => {
   try {
-
+    const protocol = useSSL ? require('https') : require('http');
   // Set batas pendengar maksimum untuk semua EventEmitter
   require('events').EventEmitter.defaultMaxListeners = 25;
   virtualUser.incrementRequestCounter();
@@ -162,11 +179,12 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
       options.headers['Content-Length'] = Buffer.from(jsonData).length;
       metrics.trackSentDataSize(Buffer.from(jsonData).length);
     }
-    
 
     const startTime = Date.now();
     let socketAllocatedTime;
-    let tokenFromResponse; // Variable untuk menyimpan token dari respons
+    let tokenFromResponse;
+    let errorDisplayed = false;
+
 
     const req = protocol.request(url, options, (res) => {
       const chunks = [];
@@ -180,28 +198,43 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
         const endTime = Date.now();
         const elapsedTime = endTime - startTime;
         metrics.trackValue(elapsedTime);
-
+      
         if (socketAllocatedTime) {
           const waitingTime = startTime - socketAllocatedTime;
           metrics.trackSocketWaitTime(waitingTime);
         }
-
+      
         if (res.statusCode === 200) {
           metrics.trackCheckPassed();
-
-          // Coba untuk mengambil token dari respons
-          try {
-            const responseData = JSON.parse(Buffer.concat(chunks).toString());
-            tokenFromResponse = responseData.token; // Ganti 'token' dengan kunci yang sesuai pada respons API
-          } catch (error) {
-            console.error('Error parsing response data:', error.message);
+      
+          // Periksa tipe konten sebelum menguraikannya sebagai JSON
+          const contentType = res.headers['content-type'];
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              const responseData = JSON.parse(Buffer.concat(chunks).toString());
+              tokenFromResponse = responseData.token;
+            } catch (error) {
+              // Tampilkan pesan kesalahan hanya sekali
+              if (!errorDisplayed) {
+                console.error('Error parsing response data:', error.message);
+                errorDisplayed = true;
+              }
+            }
+          } else {
+            // Tampilkan pesan kesalahan hanya sekali
+            if (!errorDisplayed) {
+              console.error('Error: Unexpected content type. Response is not JSON.');
+              errorDisplayed = true;
+            }
           }
         } else {
           metrics.trackCheckFailed();
+          metrics.incrementDroppedIterations({ url, method, data, auth });
         }
-
-        resolve({ elapsedTime, token: tokenFromResponse }); // Mengembalikan waktu respons dan token
+      
+        resolve({ elapsedTime, token: tokenFromResponse });
       });
+      
     });
 
     req.on('socket', (socket) => {
@@ -211,21 +244,17 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
     });
 
     req.on('error', (error) => {
-      if (error.code === 'ECONNRESET') {
-        const timestamp = new Date().toLocaleTimeString();
-        const errorMessage = `ECONNRESET or connection to the server is lost`;
-        console.error(`Error: ${errorMessage} at ${timestamp}. Stopping the performance test.`);
+      if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        const errorMessage =
+          error.code === 'ECONNRESET'
+            ? 'ECONNRESET or connection to the server is lost'
+            : error.code === 'ETIMEDOUT'
+            ? 'ETIMEDOUT - Request timed out'
+            : 'ECONNREFUSED - Connection refused by the server';
 
+        console.error(`Error: ${errorMessage}. Stopping the performance test.`);
         metrics.trackCheckFailed();
-
-        process.exit(1);
-      } else if (error.code === 'ETIMEDOUT') {
-        console.error('Error: ETIMEDOUT - Request timed out. Stopping the performance test.');
-        metrics.trackCheckFailed();
-        process.exit(1);
-      } else if (error.code === 'ECONNREFUSED') {
-        console.error('Error: ECONNREFUSED - Connection refused by the server. Stopping the performance test.');
-        metrics.trackCheckFailed();
+        metrics.incrementDroppedIterations({ url, method, data, auth });
         process.exit(1);
       } else {
         console.error('Error in HTTP request:', error.message);
@@ -240,40 +269,56 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
     req.end();
   });
 } catch (error) {
-  if (error.code === 'ETIMEDOUT') {
-    console.error('Error: ETIMEDOUT - Request timed out. Stopping the performance test.');
+  if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+    const errorMessage =
+      error.code === 'ETIMEDOUT' ? 'ETIMEDOUT - Request timed out' : 'ECONNREFUSED - Connection refused by the server';
+    console.error(`Error: ${errorMessage}. Stopping the performance test.`);
     metrics.trackCheckFailed();
-    process.exit(1);
-  } else if (error.code === 'ECONNREFUSED') {
-    console.error('Error: ECONNREFUSED - Connection refused by the server. Stopping the performance test.');
-    metrics.trackCheckFailed();
+    metrics.incrementDroppedIterations({ url, method, data, auth });
     process.exit(1);
   } else {
     console.error('Error in performHttpRequest:', error.message);
     throw error;
-    }
   }
+}
 };
 
-const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}) => {
+const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0) => {
   const metrics = new icanloadjs(thresholds);
 
   const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
 
   const requests = virtualUsers.map((user) =>
-    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
+    // Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
+    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user, null, useSSL))
   );
 
-  // Display the animation message "-------ICANLOADJS-------" without delay
-  console.log('----------ICANLOADJS----------');
+  const startTime = Date.now();
+
+  // Display the animation message "-------ICANLOADJS-------" with loading animation
+  const loadingAnimation = ['|', '/', '-', '\\'];
+  let animationIndex = 0;
+  const loadingInterval = setInterval(() => {
+    process.stdout.write(`\rLoading ${loadingAnimation[animationIndex]} Testing Performance...`);
+    animationIndex = (animationIndex + 1) % loadingAnimation.length;
+  }, 100);
 
   await Promise.all(requests.flat());
 
-  const calculatedMetrics = metrics.calculateMetrics();
+  clearInterval(loadingInterval);
+  process.stdout.write('\r'); // Clear loading animation line
 
+  const endTime = Date.now();
+  const testDurationInSeconds = (endTime - startTime) / 1000;
+
+  const calculatedMetrics = metrics.calculateMetrics();
+  calculatedMetrics.testDurationInSeconds = testDurationInSeconds;
+
+  console.log('----------ICANLOADJS----------');
   console.log(`Performance test completed for ${numRequests * numVirtualUsers} requests by ${numVirtualUsers} virtual users.`);
   console.log('Metrics:');
   console.log(calculatedMetrics);
+  console.log(`Test duration: ${testDurationInSeconds} seconds`);
 
   // Check if thresholds are defined before accessing their properties
   if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
@@ -296,7 +341,7 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
 };
 
 // Breakpoint Testing
-runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, breakpoints = {}) => {
+runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, breakpoints = {}, durationTest = 0) => {
   const metrics = new icanloadjs();
 
   const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
@@ -304,13 +349,24 @@ runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers
   const requests = virtualUsers.map((user) =>
     Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
   );
-
-  console.log('----------ICANLOADJS Breakpoint Test----------');
+  
+  // Display the animation message "-------ICANLOADJS Breakpoint Test-------" with loading animation
+  const loadingAnimation = ['|', '/', '-', '\\'];
+  let animationIndex = 0;
+  const loadingInterval = setInterval(() => {
+    process.stdout.write(`\rLoading ${loadingAnimation[animationIndex]} Running Breakpoint Test...`);
+    animationIndex = (animationIndex + 1) % loadingAnimation.length;
+  }, 100);
 
   await Promise.all(requests.flat());
 
-  const calculatedMetrics = metrics.calculateMetrics();
+  clearInterval(loadingInterval);
+  process.stdout.write('\r'); // Clear loading animation line
 
+  const calculatedMetrics = metrics.calculateMetrics();
+  calculatedMetrics.testDurationInSeconds = durationTest; // Tambahkan durasi pengujian ke dalam metrik
+
+  console.log('----------ICANLOADJS----------');
   console.log(`Breakpoint test completed for ${numRequests * numVirtualUsers} requests by ${numVirtualUsers} virtual users.`);
   console.log('Metrics:');
   console.log(calculatedMetrics);
@@ -340,13 +396,15 @@ runBreakpointIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers
   console.log(`Breakpoint test passed on ${new Date().toLocaleDateString()}.`);
 };
 
+
 const runIcanWithArrivalRate = async (
   url,
   method = 'GET',
   numRequests = 1,
   targetArrivalRate = 1, // Set your target arrival rate in requests per second
   data = null,
-  thresholds = {}
+  thresholds = {},
+  durationTest = 0 // Tambahkan parameter durasi pengujian
 ) => {
   const metrics = new icanloadjs(thresholds);
 
@@ -359,6 +417,14 @@ const runIcanWithArrivalRate = async (
   // Calculate the delay between each Virtual User's start time
   const delayBetweenUsers = 1000 / targetArrivalRate; // in milliseconds
 
+  // Display the animation message "-------ICANLOADJS Arrival Rate Test-------" with loading animation
+  const loadingAnimation = ['|', '/', '-', '\\'];
+  let animationIndex = 0;
+  const loadingInterval = setInterval(() => {
+    process.stdout.write(`\rLoading ${loadingAnimation[animationIndex]} Running Arrival Rate Test...`);
+    animationIndex = (animationIndex + 1) % loadingAnimation.length;
+  }, 100);
+
   // Function to perform a request and track metrics for a single Virtual User
   const performRequestForUser = async (user) => {
     for (let i = 0; i < numRequests; i++) {
@@ -367,38 +433,115 @@ const runIcanWithArrivalRate = async (
     }
   };
 
-  // Display the animation message "-------ICANLOADJS-------" without delay
-  console.log('----------ICANLOADJS----------');
-
   // Start each Virtual User with a delay between them
   await Promise.all(
     virtualUsers.map((user, index) => sleepIcan(index * delayBetweenUsers, index * delayBetweenUsers).then(() => performRequestForUser(user)))
   );
 
-  const calculatedMetrics = metrics.calculateMetrics();
+  clearInterval(loadingInterval);
+  process.stdout.write('\r'); // Clear loading animation line
 
-  console.log(`Performance test completed for ${numRequests * totalVirtualUsers} requests by ${totalVirtualUsers} virtual users.`);
+  const calculatedMetrics = metrics.calculateMetrics();
+  calculatedMetrics.testDurationInSeconds = durationTest; // Tambahkan durasi pengujian ke dalam metrik
+
+  console.log('----------ICANLOADJS----------');
+  console.log(`Arrival Rate test completed for ${numRequests * totalVirtualUsers} requests by ${totalVirtualUsers} virtual users.`);
   console.log('Metrics:');
   console.log(calculatedMetrics);
 
   // Check if thresholds are defined before accessing their properties
   if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
-    console.error(`Performance test failed: Exceeded the maximum allowed failed checks.`);
+    console.error(`Arrival Rate test failed: Exceeded the maximum allowed failed checks.`);
     process.exit(1);
   }
 
   // Additional matrix checks
   if (thresholds.http_req_failed && calculatedMetrics.checksFailedRate > thresholds.http_req_failed) {
-    console.error(`Performance test failed: http_req_failed rate exceeded the allowed threshold.`);
+    console.error(`Arrival Rate test failed: http_req_failed rate exceeded the allowed threshold.`);
     process.exit(1);
   }
 
   if (thresholds.http_req_duration && calculatedMetrics.percentileValue > thresholds.http_req_duration) {
-    console.error(`Performance test failed: http_req_duration exceeded the allowed threshold.`);
+    console.error(`Arrival Rate test failed: http_req_duration exceeded the allowed threshold.`);
     process.exit(1);
   }
 
-  console.log(`Performance test passed on ${new Date().toLocaleDateString()}.`);
+  console.log(`Arrival Rate test passed on ${new Date().toLocaleDateString()}.`);
+};
+
+const runIcanSSL = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0, useSSL = false) => {
+  const metrics = new icanloadjs(thresholds);
+
+  const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
+
+  const requests = virtualUsers.map((user) =>
+    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user, null, useSSL))
+  );
+
+  const startTime = Date.now();
+
+  // Display the animation message "-------ICANLOADJS SSL Test-------" with loading animation
+  const loadingAnimation = ['|', '/', '-', '\\'];
+  let animationIndex = 0;
+  const loadingInterval = setInterval(() => {
+    process.stdout.write(`\rLoading ${loadingAnimation[animationIndex]} Running SSL Test...`);
+    animationIndex = (animationIndex + 1) % loadingAnimation.length;
+  }, 100);
+
+  await Promise.all(requests.flat());
+
+  clearInterval(loadingInterval);
+  process.stdout.write('\r'); // Clear loading animation line
+
+  const endTime = Date.now();
+  const testDurationInSeconds = (endTime - startTime) / 1000;
+
+  const calculatedMetrics = metrics.calculateMetrics();
+  calculatedMetrics.testDurationInSeconds = testDurationInSeconds;
+
+  // Fungsi untuk mengevaluasi hasil SSL test
+  const evaluateSSLTest = (sslTestPassed) => {
+    if (sslTestPassed) {
+      console.log('SSL test passed!');
+    } else {
+      console.error('SSL test failed!');
+      // Anda dapat menambahkan tindakan lebih lanjut atau memberikan informasi tambahan di sini
+    }
+  };
+   // Setelah semua permintaan SSL selesai
+   await Promise.all(requests.flat());
+
+  // Memperbarui hasil pengujian SSL ke dalam metrics
+  metrics.sslTestPassed = true;
+
+  // Evaluasi hasil pengujian SSL
+  evaluateSSLTest(metrics.sslTestPassed);
+
+  console.log('----------ICANLOADJS SSL Test----------');
+  console.log(`SSL test completed for ${numRequests * numVirtualUsers} requests by ${numVirtualUsers} virtual users.`);
+  console.log('Metrics:');
+  console.log(calculatedMetrics);
+  console.log(`Test duration: ${testDurationInSeconds} seconds`);
+  
+
+  // Check if thresholds are defined before accessing their properties
+  if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
+    console.error(`SSL test failed: Exceeded the maximum allowed failed checks.`);
+    process.exit(1);
+  }
+
+  // Additional matrix checks
+  if (thresholds.http_req_failed && calculatedMetrics.checksFailedRate > thresholds.http_req_failed) {
+    console.error(`SSL test failed: http_req_failed rate exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  if (thresholds.http_req_duration && calculatedMetrics.percentileValue > thresholds.http_req_duration) {
+    console.error(`SSL test failed: http_req_duration exceeded the allowed threshold.`);
+    process.exit(1);
+  }
+
+  console.log(`SSL test passed on ${new Date().toLocaleDateString()}.`);
 };
 
 module.exports = {
@@ -406,4 +549,5 @@ module.exports = {
   runBreakpointIcan,
   sleepIcan,
   runIcanWithArrivalRate,
+  runIcanSSL,
 };

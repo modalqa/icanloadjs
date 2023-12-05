@@ -2,6 +2,15 @@
 
 Semua perubahan yang signifikan dalam proyek ini akan didokumentasikan di sini.
 
+## [1.0.7] - 2023-12-05
+## Tambah
+- Added droppedIterations, This property is used to track the number of iterations that were abandoned or dropped due to failure
+- Added droppedIterationsDetails, This property is used to store dropped iteration details, such as URLs, methods, data, and authentication information
+- Added incrementDroppedIterations(details), This method adds the number of dropped iterations and saves the iteration details.
+- Added durationTest, This parameter adds the test duration to the calculated metric.
+- Added Loading Animation, To provide visual feedback during execution, a loading animation was added during testing
+- Update Added error handling for unexpected content types and error messages displayed only once.
+
 ## [1.0.6] - 2023-11-29
 ## Tambah
 - Added error handle when the server has reached its connection limit and is refusing new connections
