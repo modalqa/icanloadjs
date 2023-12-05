@@ -142,10 +142,8 @@ const sleepIcan = (minMilliseconds, maxMilliseconds) => {
   return new Promise(resolve => setTimeout(resolve, duration));
 };
 
-// const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
-const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null, useSSL = false) => {
+const performHttpRequest = async (url, method = 'GET', data = null, metrics, virtualUser, auth = null) => {
   try {
-    const protocol = useSSL ? require('https') : require('http');
   // Set batas pendengar maksimum untuk semua EventEmitter
   require('events').EventEmitter.defaultMaxListeners = 25;
   virtualUser.incrementRequestCounter();
@@ -289,8 +287,7 @@ const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1
   const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
 
   const requests = virtualUsers.map((user) =>
-    // Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
-    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user, null, useSSL))
+    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user))
   );
 
   const startTime = Date.now();
@@ -469,85 +466,10 @@ const runIcanWithArrivalRate = async (
   console.log(`Arrival Rate test passed on ${new Date().toLocaleDateString()}.`);
 };
 
-const runIcanSSL = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0, useSSL = false) => {
-  const metrics = new icanloadjs(thresholds);
-
-  const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());
-
-  const requests = virtualUsers.map((user) =>
-    Array.from({ length: numRequests }, () => performHttpRequest(url, method, data, metrics, user, null, useSSL))
-  );
-
-  const startTime = Date.now();
-
-  // Display the animation message "-------ICANLOADJS SSL Test-------" with loading animation
-  const loadingAnimation = ['|', '/', '-', '\\'];
-  let animationIndex = 0;
-  const loadingInterval = setInterval(() => {
-    process.stdout.write(`\rLoading ${loadingAnimation[animationIndex]} Running SSL Test...`);
-    animationIndex = (animationIndex + 1) % loadingAnimation.length;
-  }, 100);
-
-  await Promise.all(requests.flat());
-
-  clearInterval(loadingInterval);
-  process.stdout.write('\r'); // Clear loading animation line
-
-  const endTime = Date.now();
-  const testDurationInSeconds = (endTime - startTime) / 1000;
-
-  const calculatedMetrics = metrics.calculateMetrics();
-  calculatedMetrics.testDurationInSeconds = testDurationInSeconds;
-
-  // Fungsi untuk mengevaluasi hasil SSL test
-  const evaluateSSLTest = (sslTestPassed) => {
-    if (sslTestPassed) {
-      console.log('SSL test passed!');
-    } else {
-      console.error('SSL test failed!');
-      // Anda dapat menambahkan tindakan lebih lanjut atau memberikan informasi tambahan di sini
-    }
-  };
-   // Setelah semua permintaan SSL selesai
-   await Promise.all(requests.flat());
-
-  // Memperbarui hasil pengujian SSL ke dalam metrics
-  metrics.sslTestPassed = true;
-
-  // Evaluasi hasil pengujian SSL
-  evaluateSSLTest(metrics.sslTestPassed);
-
-  console.log('----------ICANLOADJS SSL Test----------');
-  console.log(`SSL test completed for ${numRequests * numVirtualUsers} requests by ${numVirtualUsers} virtual users.`);
-  console.log('Metrics:');
-  console.log(calculatedMetrics);
-  console.log(`Test duration: ${testDurationInSeconds} seconds`);
-  
-
-  // Check if thresholds are defined before accessing their properties
-  if (thresholds.maxFailedChecks && calculatedMetrics.checksFailed > thresholds.maxFailedChecks) {
-    console.error(`SSL test failed: Exceeded the maximum allowed failed checks.`);
-    process.exit(1);
-  }
-
-  // Additional matrix checks
-  if (thresholds.http_req_failed && calculatedMetrics.checksFailedRate > thresholds.http_req_failed) {
-    console.error(`SSL test failed: http_req_failed rate exceeded the allowed threshold.`);
-    process.exit(1);
-  }
-
-  if (thresholds.http_req_duration && calculatedMetrics.percentileValue > thresholds.http_req_duration) {
-    console.error(`SSL test failed: http_req_duration exceeded the allowed threshold.`);
-    process.exit(1);
-  }
-
-  console.log(`SSL test passed on ${new Date().toLocaleDateString()}.`);
-};
 
 module.exports = {
   runIcan,
   runBreakpointIcan,
   sleepIcan,
   runIcanWithArrivalRate,
-  runIcanSSL,
 };
