@@ -1,6 +1,6 @@
 {
   "name": "icanloadjs",
-  "version": "1.0.10",
+  "version": "1.1.0",
   "description": "Simple and Powerful Node.js Performance Testing",
   "repository": "https://github.com/modalqa/icanloadjs",
   "homepage": "https://github.com/modalqa/icanloadjs",
@@ -16,11 +16,13 @@
     "testing",
     "http",
     "test",
-    "breakpoint test"
+    "breakpoint test",
+    "config",
+    "postman to icanloadjs"
   ],
   "author": "depfaris",
   "license": "ISC",
   "dependencies": {
-    "icanloadjs": "^1.0.10"
+    "icanloadjs": "^1.1.0"
   }
 }
