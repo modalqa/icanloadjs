@@ -281,7 +281,12 @@ const performHttpRequest = async (url, method = 'GET', data = null, metrics, vir
 }
 };
 
-const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0) => {
+// Versi bisa config
+const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0, additionalParams = {}) => {
+  // ...
+
+// Versi 1.0.10
+// const runIcan = async (url, method = 'GET', numRequests = 1, numVirtualUsers = 1, data = null, thresholds = {}, durationTest = 0) => {
   const metrics = new icanloadjs(thresholds);
 
   const virtualUsers = Array.from({ length: numVirtualUsers }, () => metrics.createVirtualUser());

@@ -8,7 +8,16 @@
   "scripts": {
     "test": "node test.js"
   },
-  "keywords": ["icanloadjs", "api", "performance", "load test", "testing", "http", "test", "breakpoint test"],
+  "keywords": [
+    "icanloadjs",
+    "api",
+    "performance",
+    "load test",
+    "testing",
+    "http",
+    "test",
+    "breakpoint test"
+  ],
   "author": "depfaris",
   "license": "ISC",
   "dependencies": {
